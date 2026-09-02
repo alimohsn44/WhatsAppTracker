@@ -1,5 +1,6 @@
 flask
 requests
-mysql-connector-python
+gunicorn
 user-agents
 flask-cors
+mysql-connector-python
