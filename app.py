@@ -173,6 +173,18 @@ def classify_visitor(user_agent, referer):
 # ============================================================
 # تسجيل الزيارة الأسطورية
 # ============================================================
+def get_client_ip(request):
+    forwarded = request.headers.get("X-Forwarded-For")
+
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+
+    real_ip = request.headers.get("X-Real-IP")
+
+    if real_ip:
+        return real_ip.strip()
+
+    return request.remote_addr
 
 def log_visit_legendary(link_id, request):
     ip = get_client_ip(request)
