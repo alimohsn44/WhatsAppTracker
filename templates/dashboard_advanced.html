@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة التحكم المتطورة</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; direction: rtl; background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: auto; }
+        h1 { color: #1a237e; }
+        #map { height: 450px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin: 20px 0; }
+        .stats { background: white; padding: 15px 25px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: inline-block; margin: 5px; }
+        .stats span { font-weight: bold; color: #1a237e; }
+        table { width: 100%; background: white; border-collapse: collapse; margin-top: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); font-size: 13px; }
+        th { background: #1a237e; color: white; padding: 10px; text-align: center; }
+        td { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
+        tr:hover { background: #f5f5f5; }
+        .badge-mobile { background: #4CAF50; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+        .badge-pc { background: #2196F3; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+        .badge-whatsapp { background: #25D366; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+        .link-id { background: #ff9800; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+        .scroll-table { overflow-x: auto; }
+        .filter-bar { margin: 15px 0; }
+        .filter-bar input { padding: 8px; border: 2px solid #ddd; border-radius: 8px; width: 200px; }
+        .detail-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; }
+        .modal-content { background: white; margin: 5% auto; padding: 30px; width: 80%; max-width: 800px; border-radius: 15px; max-height: 80%; overflow-y: auto; }
+        .close-modal { float: left; font-size: 28px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📍 لوحة التحكم المتطورة</h1>
+        
+        <div>
+            <div class="stats">📊 إجمالي الزيارات: <span>{{ total }}</span></div>
+            <div class="stats">📍 نقاط على الخريطة: <span>{{ markers|length }}</span></div>
+        </div>
+        
+        <div class="filter-bar">
+            <input type="text" id="searchInput" placeholder="🔍 بحث في الجدول..." onkeyup="filterTable()">
+        </div>
+        
+        <div id="map"></div>
+        
+        <a href="/" style="background: #4CAF50; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; margin: 10px 0;">➕ إنشاء رابط جديد</a>
+        
+        <div class="scroll-table">
+            <h2>📋 تفاصيل جميع الزيارات</h2>
+            <table id="visitsTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>الرابط</th>
+                        <th>IP</th>
+                        <th>الدولة</th>
+                        <th>المدينة</th>
+                        <th>مزود الخدمة</th>
+                        <th>المتصفح</th>
+                        <th>نظام التشغيل</th>
+                        <th>الجهاز</th>
+                        <th>المصدر</th>
+                        <th>التوقيت</th>
+                        <th>واتساب</th>
+                        <th>تفاصيل</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in markers %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td><span class="link-id">{{ m.link_id }}</span></td>
+                        <td>{{ m.ip }}</td>
+                        <td>{{ m.country }}</td>
+                        <td>{{ m.city }}</td>
+                        <td>{{ m.isp }}</td>
+                        <td>{{ m.browser }}</td>
+                        <td>{{ m.os }}</td>
+                        <td>
+                            {% if m.is_mobile %}
+                                <span class="badge-mobile">📱 جوال</span>
+                            {% else %}
+                                <span class="badge-pc">💻 كمبيوتر</span>
+                            {% endif %}
+                            {{ m.device }}
+                        </td>
+                        <td>{{ m.referer|truncate(30) }}</td>
+                        <td>{{ m.time }}</td>
+                        <td>
+                            {% if m.whatsapp %}
+                                <span class="badge-whatsapp">✅ واتساب</span>
+                            {% else %}
+                                <span style="color:#888;">—</span>
+                            {% endif %}
+                        </td>
+                        <td><button onclick="showDetails('{{ m.link_id }}')" style="background:#2196F3;color:white;border:none;border-radius:4px;padding:5px 10px;cursor:pointer;">🔍 عرض</button></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="13">لا توجد زيارات مسجلة بعد.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="detailModal" class="detail-modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeDetails()">&times;</span>
+            <h2>📋 تفاصيل الزيارة</h2>
+            <div id="detailContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const markersData = {{ markers | tojson | safe }};
+        
+        const map = L.map('map').setView([30.0, 30.0], 3);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        const markers = [];
+        markersData.forEach(function(m) {
+            if (m.lat && m.lon) {
+                const popup = `
+                    <b>IP:</b> ${m.ip}<br>
+                    <b>الدولة:</b> ${m.country}<br>
+                    <b>المدينة:</b> ${m.city}<br>
+                    <b>مزود الخدمة:</b> ${m.isp}<br>
+                    <b>المتصفح:</b> ${m.browser}<br>
+                    <b>نظام التشغيل:</b> ${m.os}<br>
+                    <b>الجهاز:</b> ${m.device} ${m.is_mobile ? '📱' : '💻'}<br>
+                    <b>التوقيت:</b> ${m.time}
+                `;
+                const marker = L.marker([m.lat, m.lon])
+                    .addTo(map)
+                    .bindPopup(popup);
+                markers.push(marker);
+            }
+        });
+
+        if (markers.length > 0) {
+            const group = L.featureGroup(markers);
+            map.fitBounds(group.getBounds().pad(0.2));
+        }
+
+        function filterTable() {
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById('visitsTable');
+            const rows = table.getElementsByTagName('tr');
+            for (let i = 1; i < rows.length; i++) {
+                let text = rows[i].textContent.toLowerCase();
+                rows[i].style.display = text.includes(filter) ? '' : 'none';
+            }
+        }
+
+        function showDetails(linkId) {
+            fetch('/api/visits')
+                .then(response => response.json())
+                .then(data => {
+                    const visit = data.find(v => v.link_id === linkId);
+                    if (visit) {
+                        const content = document.getElementById('detailContent');
+                        content.innerHTML = `
+                            <table style="width:100%;text-align:right;direction:rtl;font-size:14px;">
+                                <tr><td><b>معرف الرابط:</b></td><td>${visit.link_id}</td></tr>
+                                <tr><td><b>IP:</b></td><td>${visit.ip}</td></tr>
+                                <tr><td><b>الدولة:</b></td><td>${visit.country} (${visit.country_code || ''})</td></tr>
+                                <tr><td><b>المنطقة:</b></td><td>${visit.region || ''}</td></tr>
+                                <tr><td><b>المدينة:</b></td><td>${visit.city}</td></tr>
+                                <tr><td><b>الرمز البريدي:</b></td><td>${visit.zip || ''}</td></tr>
+                                <tr><td><b>الإحداثيات:</b></td><td>${visit.lat}, ${visit.lon}</td></tr>
+                                <tr><td><b>المنطقة الزمنية:</b></td><td>${visit.timezone || ''}</td></tr>
+                                <tr><td><b>مزود الخدمة:</b></td><td>${visit.isp}</td></tr>
+                                <tr><td><b>المنظمة:</b></td><td>${visit.org || ''}</td></tr>
+                                <tr><td><b>ASN:</b></td><td>${visit.asn || ''}</td></tr>
+                                <tr><td><b>المتصفح:</b></td><td>${visit.browser} ${visit.browser_version || ''}</td></tr>
+                                <tr><td><b>نظام التشغيل:</b></td><td>${visit.os} ${visit.os_version || ''}</td></tr>
+                                <tr><td><b>الجهاز:</b></td><td>${visit.device} ${visit.is_mobile ? '📱 جوال' : '💻 كمبيوتر'}</td></tr>
+                                <tr><td><b>المصدر (Referer):</b></td><td>${visit.referer || 'مباشر'}</td></tr>
+                                <tr><td><b>واتساب:</b></td><td>${visit.whatsapp || 'لا'}</td></tr>
+                                <tr><td><b>التوقيت:</b></td><td>${visit.created_at}</td></tr>
+                                <tr><td><b>الـ User-Agent:</b></td><td style="font-size:11px;word-break:break-all;">${visit.user_agent || ''}</td></tr>
+                            </table>
+                        `;
+                        document.getElementById('detailModal').style.display = 'block';
+                    }
+                })
+                .catch(err => console.error('خطأ:', err));
+        }
+
+        function closeDetails() {
+            document.getElementById('detailModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('detailModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
