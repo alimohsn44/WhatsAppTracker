@@ -255,7 +255,7 @@ def track_image(link_id):
     
     # بدلاً من توليد صورة، نستخدم صورة ثابتة مخزنة في مجلد static
     # أو نعيد توجيه إلى صورة خارجية
-    return redirect('https://via.placeholder.com/400x400/1a1a32/ffffff?text=Secure+Connection')
+    return redirect('https://picsum.photos/400/400')
 
 @app.route('/s/<link_id>')
 def short_redirect(link_id):
