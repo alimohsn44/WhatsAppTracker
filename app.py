@@ -181,11 +181,10 @@ def parse_ua(user_agent):
     try:
         ua = parse(user_agent)
         
-        # محاولة استخراج اسم الجهاز
         device_name = ua.device.family or "غير معروف"
         
         # إذا كان الجهاز غير معروف، نحاول استخراجه من النص
-        if device_name == "غير معروف" or device_name == "Other" or device_name == "":
+        if device_name == "غير معروف" or device_name == "Other" or device_name == "" or device_name == "10":
             ua_lower = user_agent.lower()
             
             # هواتف أيفون
@@ -203,7 +202,6 @@ def parse_ua(user_agent):
             # هواتف أندرويد
             elif "android" in ua_lower:
                 if "mobile" in ua_lower:
-                    # محاولة استخراج اسم الجهاز من User-Agent
                     if "samsung" in ua_lower:
                         device_name = "Samsung Galaxy"
                     elif "xiaomi" in ua_lower:
@@ -225,6 +223,8 @@ def parse_ua(user_agent):
                     device_name = "Windows 10/11 PC"
                 elif "windows nt 6.1" in ua_lower:
                     device_name = "Windows 7 PC"
+                elif "windows nt 6.2" in ua_lower:
+                    device_name = "Windows 8 PC"
                 else:
                     device_name = "Windows PC"
             
@@ -237,6 +237,9 @@ def parse_ua(user_agent):
             elif "chrome os" in ua_lower:
                 device_name = "Chromebook"
             
+            # إذا كان الرقم 10 يظهر، قد يكون Windows 10 أو إصدار آخر
+            elif "10" in ua_lower and "windows" in ua_lower:
+                device_name = "Windows 10/11 PC"
             else:
                 device_name = "جهاز غير معروف"
         
