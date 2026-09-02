@@ -108,18 +108,18 @@ def get_geo_super(ip):
     # 3. ipgeolocation.io
     try:
         api_key = "4e9c90d3228e496faeb44e94ce6037b0"  # ضع مفتاحك هنا
-        if api_key != "4e9c90d3228e496faeb44e94ce6037b0":
-            r = requests.get(f"https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}", timeout=5)
-            if r.status_code == 200:
-                data = r.json()
-                results.append({
-                    "lat": float(data.get("latitude", 0)),
-                    "lon": float(data.get("longitude", 0)),
-                    "country": data.get("country_name", ""),
-                    "city": data.get("city", ""),
-                    "region": data.get("state_prov", ""),
-                    "source": "ipgeolocation"
-                })
+
+        r = requests.get(f"https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}", timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            results.append({
+                "lat": float(data.get("latitude", 0)),
+                "lon": float(data.get("longitude", 0)),
+                "country": data.get("country_name", ""),
+                "city": data.get("city", ""),
+                "region": data.get("state_prov", ""),
+                "source": "ipgeolocation"
+            })
     except:
         pass
     
@@ -177,34 +177,93 @@ def get_geo_super(ip):
 # ============================================================
 
 def parse_ua(user_agent):
-    """تحليل User-Agent مع التعرف على الجهاز بدقة"""
+    """تحليل User-Agent مع التعرف على الجهاز بدقة عالية"""
     try:
         ua = parse(user_agent)
         
+        # محاولة استخراج اسم الجهاز
         device_name = ua.device.family or "غير معروف"
         
         # إذا كان الجهاز غير معروف، نحاول استخراجه من النص
-        if device_name == "غير معروف" or device_name == "Other":
+        if device_name == "غير معروف" or device_name == "Other" or device_name == "":
             ua_lower = user_agent.lower()
+            
+            # هواتف أيفون
             if "iphone" in ua_lower:
-                device_name = "iPhone"
+                if "iphone 15" in ua_lower: device_name = "iPhone 15"
+                elif "iphone 14" in ua_lower: device_name = "iPhone 14"
+                elif "iphone 13" in ua_lower: device_name = "iPhone 13"
+                elif "iphone 12" in ua_lower: device_name = "iPhone 12"
+                else: device_name = "iPhone"
+            
+            # أجهزة آيباد
             elif "ipad" in ua_lower:
                 device_name = "iPad"
-            elif "android" in ua_lower and "mobile" in ua_lower:
-                device_name = "Android Phone"
+            
+            # هواتف أندرويد
             elif "android" in ua_lower:
-                device_name = "Android Tablet"
+                if "mobile" in ua_lower:
+                    # محاولة استخراج اسم الجهاز من User-Agent
+                    if "samsung" in ua_lower:
+                        device_name = "Samsung Galaxy"
+                    elif "xiaomi" in ua_lower:
+                        device_name = "Xiaomi"
+                    elif "huawei" in ua_lower:
+                        device_name = "Huawei"
+                    elif "oneplus" in ua_lower:
+                        device_name = "OnePlus"
+                    elif "google" in ua_lower or "pixel" in ua_lower:
+                        device_name = "Google Pixel"
+                    else:
+                        device_name = "Android Phone"
+                else:
+                    device_name = "Android Tablet"
+            
+            # أجهزة كمبيوتر
             elif "windows" in ua_lower:
-                device_name = "Windows PC"
-            elif "macintosh" in ua_lower:
+                if "windows nt 10.0" in ua_lower:
+                    device_name = "Windows 10/11 PC"
+                elif "windows nt 6.1" in ua_lower:
+                    device_name = "Windows 7 PC"
+                else:
+                    device_name = "Windows PC"
+            
+            elif "macintosh" in ua_lower or "mac os" in ua_lower:
                 device_name = "Mac"
+            
             elif "linux" in ua_lower:
                 device_name = "Linux PC"
+            
+            elif "chrome os" in ua_lower:
+                device_name = "Chromebook"
+            
+            else:
+                device_name = "جهاز غير معروف"
+        
+        # استخراج نظام التشغيل بشكل أوضح
+        os_name = ua.os.family or "غير معروف"
+        if os_name == "Other" or os_name == "":
+            ua_lower = user_agent.lower()
+            if "windows" in ua_lower:
+                if "windows nt 10.0" in ua_lower:
+                    os_name = "Windows 10/11"
+                elif "windows nt 6.1" in ua_lower:
+                    os_name = "Windows 7"
+                else:
+                    os_name = "Windows"
+            elif "mac os" in ua_lower:
+                os_name = "macOS"
+            elif "android" in ua_lower:
+                os_name = "Android"
+            elif "linux" in ua_lower:
+                os_name = "Linux"
+            elif "ios" in ua_lower or "iphone" in ua_lower or "ipad" in ua_lower:
+                os_name = "iOS"
         
         return {
             "browser": ua.browser.family or "غير معروف",
             "browser_version": ua.browser.version_string or "",
-            "os": ua.os.family or "غير معروف",
+            "os": os_name,
             "os_version": ua.os.version_string or "",
             "device": device_name,
             "device_brand": ua.device.brand or "غير معروف",
@@ -214,7 +273,7 @@ def parse_ua(user_agent):
             "is_bot": ua.is_bot,
             "touch_capable": "touch" in user_agent.lower()
         }
-    except:
+    except Exception as e:
         return {
             "browser": "غير معروف",
             "os": "غير معروف",
