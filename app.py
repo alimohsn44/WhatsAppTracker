@@ -1,18 +1,16 @@
-from flask import Flask, request, render_template, redirect, jsonify, send_file
+from flask import Flask, request, redirect, jsonify
 import uuid
 import os
 import sqlite3
 import requests
-import json
 from datetime import datetime
 from user_agents import parse
-import io
 
 app = Flask(__name__)
 DB_NAME = "tracker.db"
 
 # ============================================================
-# إنشاء قاعدة البيانات الجديدة (مع كل الأعمدة)
+# إنشاء قاعدة البيانات
 # ============================================================
 
 def init_db():
@@ -25,36 +23,14 @@ def init_db():
             ip TEXT,
             user_agent TEXT,
             country TEXT,
-            country_code TEXT,
-            region TEXT,
             city TEXT,
-            postal TEXT,
             lat REAL,
             lon REAL,
-            timezone TEXT,
             isp TEXT,
-            org TEXT,
-            asn TEXT,
             browser TEXT,
-            browser_version TEXT,
             os TEXT,
-            os_version TEXT,
             device TEXT,
-            device_brand TEXT,
             is_mobile INTEGER,
-            is_tablet INTEGER,
-            is_pc INTEGER,
-            is_bot INTEGER,
-            touch_capable INTEGER,
-            screen_width INTEGER,
-            screen_height INTEGER,
-            color_depth INTEGER,
-            language TEXT,
-            timezone_offset INTEGER,
-            hardware_cores INTEGER,
-            device_memory REAL,
-            do_not_track TEXT,
-            referer TEXT,
             whatsapp_type TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -75,59 +51,31 @@ def get_geo(ip):
         loc = data.get("loc", "0,0").split(",")
         return {
             "country": data.get("country", "غير معروف"),
-            "country_code": data.get("country", ""),
-            "region": data.get("region", "غير معروف"),
             "city": data.get("city", "غير معروف"),
-            "postal": data.get("postal", ""),
             "lat": float(loc[0]) if len(loc) > 0 else 0.0,
             "lon": float(loc[1]) if len(loc) > 1 else 0.0,
-            "timezone": data.get("timezone", ""),
-            "isp": data.get("org", "غير معروف"),
-            "org": data.get("org", ""),
-            "asn": data.get("as", "")
+            "isp": data.get("org", "غير معروف")
         }
     except:
-        return {
-            "country": "غير معروف",
-            "city": "غير معروف",
-            "lat": 0.0,
-            "lon": 0.0,
-            "isp": "غير معروف"
-        }
+        return {"country": "غير معروف", "city": "غير معروف", "lat": 0.0, "lon": 0.0, "isp": "غير معروف"}
 
 def get_client_ip(request):
     return request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
 
 def detect_whatsapp(user_agent):
-    ua = user_agent.lower()
-    if 'whatsapp' in ua:
-        return 'whatsapp'
-    return None
+    return 'whatsapp' in user_agent.lower()
 
 def parse_ua(user_agent):
     try:
         ua = parse(user_agent)
         return {
             "browser": ua.browser.family,
-            "browser_version": ua.browser.version_string,
             "os": ua.os.family,
-            "os_version": ua.os.version_string,
             "device": ua.device.family,
-            "device_brand": ua.device.brand or "غير معروف",
-            "is_mobile": ua.is_mobile,
-            "is_tablet": ua.is_tablet,
-            "is_pc": ua.is_pc,
-            "is_bot": ua.is_bot,
-            "touch_capable": "touch" in user_agent.lower()
+            "is_mobile": ua.is_mobile
         }
     except:
-        return {
-            "browser": "غير معروف",
-            "os": "غير معروف",
-            "device": "غير معروف",
-            "is_mobile": False,
-            "is_pc": True
-        }
+        return {"browser": "غير معروف", "os": "غير معروف", "device": "غير معروف", "is_mobile": False}
 
 # ============================================================
 # تسجيل الزيارة
@@ -138,49 +86,75 @@ def log_visit(link_id, request):
     user_agent = request.headers.get('User-Agent', 'غير معروف')
     geo = get_geo(ip)
     ua = parse_ua(user_agent)
-    whatsapp = detect_whatsapp(user_agent)
     
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO visits (
-            link_id, ip, user_agent,
-            country, country_code, region, city, postal, lat, lon, timezone,
-            isp, org, asn,
-            browser, browser_version,
-            os, os_version,
-            device, device_brand,
-            is_mobile, is_tablet, is_pc, is_bot, touch_capable,
-            referer, whatsapp_type
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO visits (link_id, ip, user_agent, country, city, lat, lon, isp, browser, os, device, is_mobile, whatsapp_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         link_id, ip, user_agent,
-        geo.get('country'), geo.get('country_code'), geo.get('region'),
-        geo.get('city'), geo.get('postal'), geo.get('lat'), geo.get('lon'),
-        geo.get('timezone'), geo.get('isp'), geo.get('org'), geo.get('asn'),
-        ua.get('browser'), ua.get('browser_version'),
-        ua.get('os'), ua.get('os_version'),
-        ua.get('device'), ua.get('device_brand'),
+        geo.get('country'), geo.get('city'), geo.get('lat'), geo.get('lon'), geo.get('isp'),
+        ua.get('browser'), ua.get('os'), ua.get('device'),
         1 if ua.get('is_mobile') else 0,
-        1 if ua.get('is_tablet') else 0,
-        1 if ua.get('is_pc') else 0,
-        1 if ua.get('is_bot') else 0,
-        1 if ua.get('touch_capable') else 0,
-        request.headers.get('Referer', ''),
-        whatsapp
+        'whatsapp' if detect_whatsapp(user_agent) else None
     ))
     conn.commit()
     conn.close()
 
 # ============================================================
-# المسارات
+# المسارات (بدون قوالب خارجية)
 # ============================================================
 
 @app.route('/')
 def home():
     link_id = str(uuid.uuid4())[:8]
     image_link = request.url_root + 'image/' + link_id + '.png'
-    return render_template('index.html', image_link=image_link, link_id=link_id)
+    
+    # صفحة HTML مضمّنة داخل الكود
+    html = f'''
+    <!DOCTYPE html>
+    <html dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>رابط التتبع</title>
+        <style>
+            body {{ font-family: 'Segoe UI', Tahoma, sans-serif; text-align: center; padding: 50px; background: #f0f2f5; }}
+            .container {{ max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }}
+            .link-box {{ background: #e8f0fe; padding: 15px; border-radius: 8px; word-break: break-all; }}
+            input {{ width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; margin: 10px 0; }}
+            button {{ background: #25D366; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; cursor: pointer; }}
+            button:hover {{ background: #1ebe5f; }}
+            .badge {{ background: #ff9800; color: white; padding: 5px 15px; border-radius: 20px; display: inline-block; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>📍 رابط التتبع المتطور</h1>
+            <p>انسخ الرابط وأرسله في واتساب. سيتم جمع معلومات دقيقة عن كل من يفتحه.</p>
+            <div class="link-box">
+                <strong>🖼️ رابط الصورة:</strong><br>
+                <span id="linkText">{image_link}</span>
+            </div>
+            <input type="text" value="{image_link}" id="linkInput" readonly>
+            <button onclick="copyLink()">📋 نسخ الرابط</button>
+            <br><br>
+            <a href="/dashboard" target="_blank"><button style="background: #2196F3;">📊 لوحة التحكم</button></a>
+            <p class="badge">معرف الرابط: {link_id}</p>
+        </div>
+        <script>
+            function copyLink() {{
+                const input = document.getElementById('linkInput');
+                input.select();
+                document.execCommand('copy');
+                alert('تم نسخ الرابط!');
+            }}
+        </script>
+    </body>
+    </html>
+    '''
+    return html
 
 @app.route('/image/<link_id>.png')
 def track_image(link_id):
@@ -195,33 +169,33 @@ def dashboard():
     visits = c.fetchall()
     conn.close()
     
-    html = """
+    html = f'''
     <!DOCTYPE html>
     <html dir="rtl">
     <head><meta charset="UTF-8"><title>لوحة التحكم</title>
     <style>
-        body { font-family: Arial; background: #f0f2f5; padding: 20px; }
-        .stats { background: white; padding: 15px; border-radius: 10px; display: inline-block; margin: 5px; }
-        table { width: 100%; background: white; border-collapse: collapse; border-radius: 10px; overflow: hidden; }
-        th { background: #1a237e; color: white; padding: 10px; }
-        td { padding: 8px; border-bottom: 1px solid #eee; }
-        tr:hover { background: #f5f5f5; }
+        body {{ font-family: Arial; background: #f0f2f5; padding: 20px; }}
+        .stats {{ background: white; padding: 15px; border-radius: 10px; display: inline-block; margin: 5px; }}
+        table {{ width: 100%; background: white; border-collapse: collapse; border-radius: 10px; overflow: hidden; }}
+        th {{ background: #1a237e; color: white; padding: 10px; }}
+        td {{ padding: 8px; border-bottom: 1px solid #eee; }}
+        tr:hover {{ background: #f5f5f5; }}
     </style>
     </head>
     <body>
     <h1>📊 لوحة التحكم</h1>
-    <div class="stats">👥 إجمالي الزيارات: <strong>""" + str(len(visits)) + """</strong></div>
+    <div class="stats">👥 إجمالي الزيارات: <strong>{len(visits)}</strong></div>
     <br><br>
     <table>
     <tr><th>#</th><th>IP</th><th>الدولة</th><th>المدينة</th><th>المتصفح</th><th>نظام التشغيل</th><th>الجهاز</th><th>واتساب</th><th>التوقيت</th></tr>
-    """
+    '''
     for i, v in enumerate(visits, 1):
-        html += f"<tr><td>{i}</td><td>{v[2]}</td><td>{v[4]}</td><td>{v[7]}</td><td>{v[16]}</td><td>{v[18]}</td><td>{v[20]}</td><td>{'✅' if v[35] else '❌'}</td><td>{v[36]}</td></tr>"
-    html += """
+        html += f"<tr><td>{i}</td><td>{v[2]}</td><td>{v[4]}</td><td>{v[5]}</td><td>{v[9]}</td><td>{v[10]}</td><td>{v[11]}</td><td>{'✅' if v[13] else '❌'}</td><td>{v[14]}</td></tr>"
+    html += '''
     </table>
     <br><a href="/">🔙 العودة</a>
     </body></html>
-    """
+    '''
     return html
 
 @app.route('/api/visits')
@@ -238,14 +212,14 @@ def api_visits():
             "link_id": v[1],
             "ip": v[2],
             "country": v[4],
-            "city": v[7],
-            "lat": v[9],
-            "lon": v[10],
-            "browser": v[16],
-            "os": v[18],
-            "device": v[20],
-            "whatsapp": v[35],
-            "created_at": v[36]
+            "city": v[5],
+            "lat": v[6],
+            "lon": v[7],
+            "browser": v[9],
+            "os": v[10],
+            "device": v[11],
+            "whatsapp": v[13],
+            "created_at": v[14]
         })
     return jsonify(results)
 
