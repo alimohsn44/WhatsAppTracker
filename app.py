@@ -177,33 +177,80 @@ def get_geo_super(ip):
 # ============================================================
 
 def parse_ua(user_agent):
-    """تحليل User-Agent واستخراج الجهاز ونظام التشغيل بدقة"""
+    """تحليل User-Agent واستخراج الجهاز ونظام التشغيل بدقة عالية"""
     try:
-        from user_agents import parse
         ua = parse(user_agent)
         
-        # استخراج الجهاز
+        # ============================================================
+        # 1. استخراج الجهاز (Device)
+        # ============================================================
         device = ua.device.family or "غير معروف"
-        if device in ["Other", "Unknown", "", "10"]:
+        
+        # إذا كان الجهاز غير معروف أو رقم، نحاول استخراجه من النص
+        if device in ["Other", "Unknown", "", "10", "18.7"] or device.isdigit():
             ua_lower = user_agent.lower()
+            
+            # --- هواتف أيفون ---
             if "iphone" in ua_lower:
-                device = "iPhone"
+                if "iphone 15" in ua_lower:
+                    device = "iPhone 15"
+                elif "iphone 14" in ua_lower:
+                    device = "iPhone 14"
+                elif "iphone 13" in ua_lower:
+                    device = "iPhone 13"
+                elif "iphone 12" in ua_lower:
+                    device = "iPhone 12"
+                else:
+                    device = "iPhone"
+            
+            # --- أجهزة آيباد ---
             elif "ipad" in ua_lower:
                 device = "iPad"
-            elif "android" in ua_lower and "mobile" in ua_lower:
-                device = "Android Phone"
+            
+            # --- هواتف أندرويد ---
             elif "android" in ua_lower:
-                device = "Android Tablet"
+                if "mobile" in ua_lower:
+                    if "samsung" in ua_lower:
+                        device = "Samsung Galaxy"
+                    elif "xiaomi" in ua_lower:
+                        device = "Xiaomi"
+                    elif "huawei" in ua_lower:
+                        device = "Huawei"
+                    elif "oneplus" in ua_lower:
+                        device = "OnePlus"
+                    elif "google" in ua_lower or "pixel" in ua_lower:
+                        device = "Google Pixel"
+                    else:
+                        device = "Android Phone"
+                else:
+                    device = "Android Tablet"
+            
+            # --- أجهزة كمبيوتر ---
             elif "windows" in ua_lower:
-                device = "Windows PC"
-            elif "macintosh" in ua_lower:
+                if "windows nt 10.0" in ua_lower:
+                    device = "Windows 10/11 PC"
+                elif "windows nt 6.1" in ua_lower:
+                    device = "Windows 7 PC"
+                elif "windows nt 6.2" in ua_lower:
+                    device = "Windows 8 PC"
+                else:
+                    device = "Windows PC"
+            
+            elif "macintosh" in ua_lower or "mac os" in ua_lower:
                 device = "Mac"
+            
             elif "linux" in ua_lower:
                 device = "Linux PC"
+            
+            elif "chrome os" in ua_lower:
+                device = "Chromebook"
+            
             else:
                 device = "جهاز غير معروف"
         
-        # استخراج نظام التشغيل
+        # ============================================================
+        # 2. استخراج نظام التشغيل (OS)
+        # ============================================================
         os_name = ua.os.family or "غير معروف"
         if os_name in ["Other", "Unknown", ""]:
             ua_lower = user_agent.lower()
@@ -211,6 +258,8 @@ def parse_ua(user_agent):
                 os_name = "Windows 10/11"
             elif "windows nt 6.1" in ua_lower:
                 os_name = "Windows 7"
+            elif "windows nt 6.2" in ua_lower:
+                os_name = "Windows 8"
             elif "windows" in ua_lower:
                 os_name = "Windows"
             elif "mac os" in ua_lower or "macintosh" in ua_lower:
@@ -222,8 +271,22 @@ def parse_ua(user_agent):
             elif "iphone" in ua_lower or "ipad" in ua_lower:
                 os_name = "iOS"
         
-        # استخراج المتصفح
+        # ============================================================
+        # 3. استخراج المتصفح (Browser)
+        # ============================================================
         browser = ua.browser.family or "غير معروف"
+        if browser in ["Other", "Unknown", ""]:
+            ua_lower = user_agent.lower()
+            if "firefox" in ua_lower:
+                browser = "Firefox"
+            elif "chrome" in ua_lower and "edg" not in ua_lower:
+                browser = "Chrome"
+            elif "safari" in ua_lower and "chrome" not in ua_lower:
+                browser = "Safari"
+            elif "edg" in ua_lower:
+                browser = "Edge"
+            elif "opera" in ua_lower:
+                browser = "Opera"
         
         return {
             "browser": browser,
@@ -239,7 +302,6 @@ def parse_ua(user_agent):
             "touch_capable": "touch" in user_agent.lower()
         }
     except Exception as e:
-        print(f"Error parsing UA: {e}")
         return {
             "browser": "غير معروف",
             "os": "غير معروف",
