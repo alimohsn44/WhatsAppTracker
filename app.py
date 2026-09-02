@@ -17,11 +17,11 @@ app.config['SECRET_KEY'] = 'your-super-secret-key-change-this'
 
 def get_db_connection():
     return mysql.connector.connect(
-        host=os.environ.get('whatsapp-db-mohsnali713.c.aivencloud.com'),
-        user=os.environ.get('avnadmin'),
-        password=os.environ.get('AVNS_1O6ymCnv5tFbhuRurWk'),
-        database=os.environ.get('defaultdb'),
-        port=os.environ.get('27701'),
+        host=os.environ.get('DB_HOST'),
+        user=os.environ.get('DB_USER'),
+        password=os.environ.get('DB_PASSWORD'),
+        database=os.environ.get('DB_NAME'),
+        port=os.environ.get('DB_PORT'),
         ssl_disabled=False,
         use_pure=True
     )
