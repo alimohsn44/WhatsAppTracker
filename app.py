@@ -64,126 +64,102 @@ def init_db():
 init_db()
 
 # ============================================================
-# دوال تحديد الموقع فائقة الدقة
+# دالة get_geo_super (فائقة الدقة)
 # ============================================================
 
-def get_geo_ipinfo(ip):
-    """جلب الموقع من ipinfo.io"""
+def get_geo_super(ip):
+    """جلب الموقع من 3 خدمات مع حساب دقة الموقع"""
+    results = []
+    
+    # 1. ipinfo.io
     try:
         r = requests.get(f"https://ipinfo.io/{ip}/json", timeout=5)
-        data = r.json()
-        loc = data.get("loc", "0,0").split(",")
-        return {
-            "lat": float(loc[0]) if len(loc) > 0 else None,
-            "lon": float(loc[1]) if len(loc) > 1 else None,
-            "country": data.get("country", ""),
-            "city": data.get("city", ""),
-            "region": data.get("region", ""),
-            "postal": data.get("postal", ""),
-            "timezone": data.get("timezone", ""),
-            "org": data.get("org", ""),
-            "source": "ipinfo"
-        }
-    except:
-        return None
-
-def get_geo_ipapi(ip):
-    """جلب الموقع من ip-api.com"""
-    try:
-        r = requests.get(f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,zip,lat,lon,timezone,isp,org,as", timeout=5)
-        data = r.json()
-        if data.get("status") == "success":
-            return {
-                "lat": data.get("lat"),
-                "lon": data.get("lon"),
+        if r.status_code == 200:
+            data = r.json()
+            loc = data.get("loc", "0,0").split(",")
+            results.append({
+                "lat": float(loc[0]) if len(loc) > 0 else 0,
+                "lon": float(loc[1]) if len(loc) > 1 else 0,
                 "country": data.get("country", ""),
                 "city": data.get("city", ""),
-                "region": data.get("regionName", ""),
-                "postal": data.get("zip", ""),
-                "timezone": data.get("timezone", ""),
-                "org": data.get("org", ""),
-                "source": "ip-api"
-            }
-        return None
+                "region": data.get("region", ""),
+                "source": "ipinfo"
+            })
     except:
-        return None
-
-def get_geo_ipgeolocation(ip):
-    """جلب الموقع من ipgeolocation.io (مجاني مع مفتاح)"""
+        pass
+    
+    # 2. ip-api.com
     try:
-        # سجل في ipgeolocation.io واحصل على مفتاح مجاني
-        api_key = "YOUR_API_KEY"  # استبدله بمفتاحك
-        r = requests.get(f"https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}", timeout=5)
-        data = r.json()
-        return {
-            "lat": float(data.get("latitude", 0)),
-            "lon": float(data.get("longitude", 0)),
-            "country": data.get("country_name", ""),
-            "city": data.get("city", ""),
-            "region": data.get("state_prov", ""),
-            "postal": data.get("zipcode", ""),
-            "timezone": data.get("time_zone", {}).get("name", ""),
-            "org": data.get("isp", ""),
-            "source": "ipgeolocation"
-        }
+        r = requests.get(f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,zip,lat,lon,timezone,isp,org,as", timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("status") == "success":
+                results.append({
+                    "lat": data.get("lat", 0),
+                    "lon": data.get("lon", 0),
+                    "country": data.get("country", ""),
+                    "city": data.get("city", ""),
+                    "region": data.get("regionName", ""),
+                    "source": "ip-api"
+                })
     except:
-        return None
-
-def get_accurate_location(ip):
-    """دمج جميع المصادر للحصول على موقع فائق الدقة"""
-    sources = []
+        pass
     
-    # جلب من جميع المصادر
-    data1 = get_geo_ipinfo(ip)
-    data2 = get_geo_ipapi(ip)
-    data3 = get_geo_ipgeolocation(ip)
+    # 3. ipgeolocation.io
+    try:
+        api_key = "YOUR_API_KEY_HERE"  # ضع مفتاحك هنا
+        if api_key != "YOUR_API_KEY_HERE":
+            r = requests.get(f"https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                results.append({
+                    "lat": float(data.get("latitude", 0)),
+                    "lon": float(data.get("longitude", 0)),
+                    "country": data.get("country_name", ""),
+                    "city": data.get("city", ""),
+                    "region": data.get("state_prov", ""),
+                    "source": "ipgeolocation"
+                })
+    except:
+        pass
     
-    if data1:
-        sources.append(data1)
-    if data2:
-        sources.append(data2)
-    if data3:
-        sources.append(data3)
-    
-    if not sources:
+    if not results:
         return {
             "lat": 0.0,
             "lon": 0.0,
             "country": "غير معروف",
             "city": "غير معروف",
             "region": "غير معروف",
-            "postal": "",
-            "timezone": "",
-            "org": "",
-            "accuracy": 0,
-            "source": "لا يوجد"
+            "source": "لا يوجد",
+            "accuracy": 0
         }
     
-    # استخراج الإحداثيات الصحيحة
-    lats = [s["lat"] for s in sources if s["lat"] is not None and s["lat"] != 0]
-    lons = [s["lon"] for s in sources if s["lon"] is not None and s["lon"] != 0]
+    # حساب متوسط الإحداثيات
+    lats = [r["lat"] for r in results if r["lat"] != 0]
+    lons = [r["lon"] for r in results if r["lon"] != 0]
     
-    # حساب المتوسط (أكثر دقة من استخدام مصدر واحد)
-    avg_lat = statistics.mean(lats) if lats else 0.0
-    avg_lon = statistics.mean(lons) if lons else 0.0
+    avg_lat = sum(lats) / len(lats) if lats else 0
+    avg_lon = sum(lons) / len(lons) if lons else 0
     
-    # حساب الانحراف المعياري لتقدير الدقة
-    accuracy = 0
-    if len(lats) > 1:
+    # حساب الدقة
+    if len(results) >= 3:
         try:
-            std_lat = statistics.stdev(lats)
-            std_lon = statistics.stdev(lons)
-            accuracy = int((std_lat + std_lon) * 100)  # تقريب
+            lat_std = statistics.stdev(lats) if len(lats) > 1 else 0
+            lon_std = statistics.stdev(lons) if len(lons) > 1 else 0
+            avg_error = (lat_std + lon_std) / 2
+            accuracy = max(0, min(100, 100 - (avg_error * 100)))
         except:
-            accuracy = 50
+            accuracy = 75
+    elif len(results) == 2:
+        accuracy = 50
     else:
-        accuracy = 75  # دقة متوسطة
+        accuracy = 30
     
-    # اختيار أفضل مصدر للمعلومات الأخرى
-    best_source = sources[0]
-    for s in sources:
-        if s.get("city") and s["city"] != "غير معروف":
-            best_source = s
+    # اختيار أفضل مصدر للمعلومات الإضافية
+    best_source = results[0]
+    for r in results:
+        if r.get("city") and r["city"] not in ["", "غير معروف"]:
+            best_source = r
             break
     
     return {
@@ -192,32 +168,45 @@ def get_accurate_location(ip):
         "country": best_source.get("country", "غير معروف"),
         "city": best_source.get("city", "غير معروف"),
         "region": best_source.get("region", "غير معروف"),
-        "postal": best_source.get("postal", ""),
-        "timezone": best_source.get("timezone", ""),
-        "org": best_source.get("org", ""),
-        "accuracy": accuracy,
-        "source": ", ".join([s.get("source", "") for s in sources])
+        "source": ", ".join([r.get("source", "") for r in results]),
+        "accuracy": int(accuracy)
     }
 
 # ============================================================
-# دوال مساعدة أخرى
+# دالة parse_ua (تحليل الجهاز بدقة)
 # ============================================================
 
-def get_client_ip(request):
-    return request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
-
-def detect_whatsapp(user_agent):
-    return 'whatsapp' in user_agent.lower()
-
 def parse_ua(user_agent):
+    """تحليل User-Agent مع التعرف على الجهاز بدقة"""
     try:
         ua = parse(user_agent)
+        
+        device_name = ua.device.family or "غير معروف"
+        
+        # إذا كان الجهاز غير معروف، نحاول استخراجه من النص
+        if device_name == "غير معروف" or device_name == "Other":
+            ua_lower = user_agent.lower()
+            if "iphone" in ua_lower:
+                device_name = "iPhone"
+            elif "ipad" in ua_lower:
+                device_name = "iPad"
+            elif "android" in ua_lower and "mobile" in ua_lower:
+                device_name = "Android Phone"
+            elif "android" in ua_lower:
+                device_name = "Android Tablet"
+            elif "windows" in ua_lower:
+                device_name = "Windows PC"
+            elif "macintosh" in ua_lower:
+                device_name = "Mac"
+            elif "linux" in ua_lower:
+                device_name = "Linux PC"
+        
         return {
             "browser": ua.browser.family or "غير معروف",
             "browser_version": ua.browser.version_string or "",
             "os": ua.os.family or "غير معروف",
             "os_version": ua.os.version_string or "",
-            "device": ua.device.family or "غير معروف",
+            "device": device_name,
             "device_brand": ua.device.brand or "غير معروف",
             "is_mobile": ua.is_mobile,
             "is_tablet": ua.is_tablet,
@@ -233,6 +222,16 @@ def parse_ua(user_agent):
             "is_mobile": False,
             "is_pc": True
         }
+
+# ============================================================
+# دوال مساعدة أخرى
+# ============================================================
+
+def get_client_ip(request):
+    return request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+
+def detect_whatsapp(user_agent):
+    return 'whatsapp' in user_agent.lower()
 
 def detect_vpn(ip):
     try:
@@ -269,16 +268,14 @@ def classify_visitor(user_agent, referer, ip):
     return "زائر عادي"
 
 # ============================================================
-# تسجيل الزيارة فائقة الدقة
+# تسجيل الزيارة (باستخدام الدوال الجديدة)
 # ============================================================
 
 def log_visit(link_id, request):
     ip = get_client_ip(request)
     user_agent = request.headers.get('User-Agent', 'غير معروف')
     
-    # الحصول على الموقع فائق الدقة
-    geo = get_accurate_location(ip)
-    
+    geo = get_geo_super(ip)
     ua = parse_ua(user_agent)
     whatsapp = detect_whatsapp(user_agent)
     vpn = detect_vpn(ip)
@@ -304,11 +301,11 @@ def log_visit(link_id, request):
     ''', (
         link_id, ip, user_agent,
         geo.get('country'), "", geo.get('region'),
-        geo.get('city'), geo.get('postal'),
+        geo.get('city'), "",
         geo.get('lat'), geo.get('lon'),
         geo.get('lat'), geo.get('lon'),
         geo.get('accuracy'),
-        geo.get('timezone'), geo.get('org'), "", "",
+        "", geo.get('org'), "", "",
         ua.get('browser'), ua.get('browser_version'),
         ua.get('os'), ua.get('os_version'),
         ua.get('device'), ua.get('device_brand'),
