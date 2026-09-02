@@ -177,98 +177,60 @@ def get_geo_super(ip):
 # ============================================================
 
 def parse_ua(user_agent):
-    """تحليل User-Agent مع التعرف على الجهاز بدقة عالية"""
+    """تحليل User-Agent واستخراج الجهاز ونظام التشغيل بدقة"""
     try:
+        from user_agents import parse
         ua = parse(user_agent)
         
-        device_name = ua.device.family or "غير معروف"
-        
-        # إذا كان الجهاز غير معروف، نحاول استخراجه من النص
-        if device_name == "غير معروف" or device_name == "Other" or device_name == "" or device_name == "10":
+        # استخراج الجهاز
+        device = ua.device.family or "غير معروف"
+        if device in ["Other", "Unknown", "", "10"]:
             ua_lower = user_agent.lower()
-            
-            # هواتف أيفون
             if "iphone" in ua_lower:
-                if "iphone 15" in ua_lower: device_name = "iPhone 15"
-                elif "iphone 14" in ua_lower: device_name = "iPhone 14"
-                elif "iphone 13" in ua_lower: device_name = "iPhone 13"
-                elif "iphone 12" in ua_lower: device_name = "iPhone 12"
-                else: device_name = "iPhone"
-            
-            # أجهزة آيباد
+                device = "iPhone"
             elif "ipad" in ua_lower:
-                device_name = "iPad"
-            
-            # هواتف أندرويد
+                device = "iPad"
+            elif "android" in ua_lower and "mobile" in ua_lower:
+                device = "Android Phone"
             elif "android" in ua_lower:
-                if "mobile" in ua_lower:
-                    if "samsung" in ua_lower:
-                        device_name = "Samsung Galaxy"
-                    elif "xiaomi" in ua_lower:
-                        device_name = "Xiaomi"
-                    elif "huawei" in ua_lower:
-                        device_name = "Huawei"
-                    elif "oneplus" in ua_lower:
-                        device_name = "OnePlus"
-                    elif "google" in ua_lower or "pixel" in ua_lower:
-                        device_name = "Google Pixel"
-                    else:
-                        device_name = "Android Phone"
-                else:
-                    device_name = "Android Tablet"
-            
-            # أجهزة كمبيوتر
+                device = "Android Tablet"
             elif "windows" in ua_lower:
-                if "windows nt 10.0" in ua_lower:
-                    device_name = "Windows 10/11 PC"
-                elif "windows nt 6.1" in ua_lower:
-                    device_name = "Windows 7 PC"
-                elif "windows nt 6.2" in ua_lower:
-                    device_name = "Windows 8 PC"
-                else:
-                    device_name = "Windows PC"
-            
-            elif "macintosh" in ua_lower or "mac os" in ua_lower:
-                device_name = "Mac"
-            
+                device = "Windows PC"
+            elif "macintosh" in ua_lower:
+                device = "Mac"
             elif "linux" in ua_lower:
-                device_name = "Linux PC"
-            
-            elif "chrome os" in ua_lower:
-                device_name = "Chromebook"
-            
-            # إذا كان الرقم 10 يظهر، قد يكون Windows 10 أو إصدار آخر
-            elif "10" in ua_lower and "windows" in ua_lower:
-                device_name = "Windows 10/11 PC"
+                device = "Linux PC"
             else:
-                device_name = "جهاز غير معروف"
+                device = "جهاز غير معروف"
         
-        # استخراج نظام التشغيل بشكل أوضح
+        # استخراج نظام التشغيل
         os_name = ua.os.family or "غير معروف"
-        if os_name == "Other" or os_name == "":
+        if os_name in ["Other", "Unknown", ""]:
             ua_lower = user_agent.lower()
-            if "windows" in ua_lower:
-                if "windows nt 10.0" in ua_lower:
-                    os_name = "Windows 10/11"
-                elif "windows nt 6.1" in ua_lower:
-                    os_name = "Windows 7"
-                else:
-                    os_name = "Windows"
-            elif "mac os" in ua_lower:
+            if "windows nt 10.0" in ua_lower:
+                os_name = "Windows 10/11"
+            elif "windows nt 6.1" in ua_lower:
+                os_name = "Windows 7"
+            elif "windows" in ua_lower:
+                os_name = "Windows"
+            elif "mac os" in ua_lower or "macintosh" in ua_lower:
                 os_name = "macOS"
             elif "android" in ua_lower:
                 os_name = "Android"
             elif "linux" in ua_lower:
                 os_name = "Linux"
-            elif "ios" in ua_lower or "iphone" in ua_lower or "ipad" in ua_lower:
+            elif "iphone" in ua_lower or "ipad" in ua_lower:
                 os_name = "iOS"
         
+        # استخراج المتصفح
+        browser = ua.browser.family or "غير معروف"
+        
         return {
-            "browser": ua.browser.family or "غير معروف",
+            "browser": browser,
             "browser_version": ua.browser.version_string or "",
             "os": os_name,
             "os_version": ua.os.version_string or "",
-            "device": device_name,
+            "device": device,
             "device_brand": ua.device.brand or "غير معروف",
             "is_mobile": ua.is_mobile,
             "is_tablet": ua.is_tablet,
@@ -277,6 +239,7 @@ def parse_ua(user_agent):
             "touch_capable": "touch" in user_agent.lower()
         }
     except Exception as e:
+        print(f"Error parsing UA: {e}")
         return {
             "browser": "غير معروف",
             "os": "غير معروف",
@@ -284,7 +247,6 @@ def parse_ua(user_agent):
             "is_mobile": False,
             "is_pc": True
         }
-
 # ============================================================
 # دوال مساعدة أخرى
 # ============================================================
