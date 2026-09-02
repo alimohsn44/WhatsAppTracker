@@ -107,8 +107,8 @@ def get_geo_super(ip):
     
     # 3. ipgeolocation.io
     try:
-        api_key = "YOUR_API_KEY_HERE"  # ضع مفتاحك هنا
-        if api_key != "YOUR_API_KEY_HERE":
+        api_key = "4e9c90d3228e496faeb44e94ce6037b0"  # ضع مفتاحك هنا
+        if api_key != "4e9c90d3228e496faeb44e94ce6037b0":
             r = requests.get(f"https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}", timeout=5)
             if r.status_code == 200:
                 data = r.json()
