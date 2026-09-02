@@ -207,7 +207,6 @@ def log_visit_advanced(link_id, request):
             is_pc, is_bot, touch_capable, accept_language, referer, origin, dnt,
             sec_ch_ua, sec_ch_ua_platform, whatsapp_type
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    ''', (
         link_id, ip, user_agent_string,
         geo.get('country'), geo.get('country_code'), geo.get('region'), geo.get('city'), geo.get('zip'),
         geo.get('lat'), geo.get('lon'), geo.get('timezone'), geo.get('isp'), geo.get('org'),
