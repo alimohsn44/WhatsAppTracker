@@ -4,3 +4,4 @@ gunicorn
 user-agents
 flask-cors
 mysql-connector-python
+pillow
